@@ -1,111 +1,141 @@
-from flask import Flask, render_template, request, jsonify, redirect, session
+import os
+from datetime import datetime
+from flask import Flask, render_template, request, redirect, session, flash
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
-import random, string
+from dotenv import load_dotenv
 
-# ================= INIT =================
+# =========================
+# INIT
+# =========================
+load_dotenv()
+
 app = Flask(__name__)
-app.config['SECRET_KEY'] = "secret123"
-app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///attendance.db"
+app.secret_key = os.getenv("SECRET_KEY", "supersecret")
+
+# =========================
+# DATABASE CONFIG (RENDER)
+# =========================
+database_url = os.getenv("DATABASE_URL")
+
+# Fix for Render (important)
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
+    "connect_args": {
+        "sslmode": "require"
+    }
+}
 
 db = SQLAlchemy(app)
 
-# ================= MODELS =================
+# =========================
+# MODELS
+# =========================
 
 class User(db.Model):
+    __tablename__ = "users"
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100))
-    email = db.Column(db.String(100), unique=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(200))
-    role = db.Column(db.String(20))
+    role = db.Column(db.String(50))  # student, trainer, institution
 
 
 class Batch(db.Model):
+    __tablename__ = "batches"
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100))
-    trainer_id = db.Column(db.Integer)
-    invite_code = db.Column(db.String(10), unique=True)
+    trainer_id = db.Column(db.Integer, db.ForeignKey('users.id'))
 
 
-class BatchStudent(db.Model):
+class Enrollment(db.Model):
+    __tablename__ = "enrollments"
+
     id = db.Column(db.Integer, primary_key=True)
-    batch_id = db.Column(db.Integer)
-    student_id = db.Column(db.Integer)
+    student_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    batch_id = db.Column(db.Integer, db.ForeignKey('batches.id'))
 
 
-class SessionModel(db.Model):
+class Session(db.Model):
+    __tablename__ = "sessions"
+
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100))
     date = db.Column(db.Date)
-    trainer_id = db.Column(db.Integer)
-    batch_id = db.Column(db.Integer)
+    batch_id = db.Column(db.Integer, db.ForeignKey('batches.id'))
 
 
 class Attendance(db.Model):
+    __tablename__ = "attendance"
+
     id = db.Column(db.Integer, primary_key=True)
-    session_id = db.Column(db.Integer)
-    student_id = db.Column(db.Integer)
-    status = db.Column(db.String(20))
-    marked_at = db.Column(db.DateTime, default=datetime.utcnow)
+    student_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    session_id = db.Column(db.Integer, db.ForeignKey('sessions.id'))
+    status = db.Column(db.String(20))  # Present, Absent, Late
 
 
-# ================= HELPERS =================
+# =========================
+# CREATE TABLES
+# =========================
+with app.app_context():
+    db.create_all()
 
-def generate_code():
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-
-
-def require_login():
-    return 'user_id' in session
-
-
-# ================= ROUTES =================
+# =========================
+# ROUTES
+# =========================
 
 @app.route('/')
 def home():
-    return render_template('index.html')
+    return render_template("index.html")
 
 
-# ================= AUTH =================
+# =========================
+# AUTH
+# =========================
 
 @app.route('/signup', methods=['POST'])
 def signup():
-    data = request.get_json()
+    name = request.form['name']
+    email = request.form['email']
+    password = generate_password_hash(request.form['password'])
+    role = request.form['role']
 
-    if not all([data.get('name'), data.get('email'), data.get('password'), data.get('role')]):
-        return jsonify({'message': 'All fields required'}), 400
+    if User.query.filter_by(email=email).first():
+        flash("User already exists")
+        return redirect('/')
 
-    if User.query.filter_by(email=data['email']).first():
-        return jsonify({'message': 'Email already exists'}), 400
-
-    user = User(
-        name=data['name'],
-        email=data['email'],
-        password=generate_password_hash(data['password']),
-        role=data['role']
-    )
-
-    db.session.add(user)
+    new_user = User(name=name, email=email, password=password, role=role)
+    db.session.add(new_user)
     db.session.commit()
 
-    return jsonify({'message': 'Signup successful'})
+    flash("Signup successful")
+    return redirect('/')
 
 
 @app.route('/login', methods=['POST'])
 def login():
-    data = request.get_json()
+    email = request.form['email']
+    password = request.form['password']
 
-    user = User.query.filter_by(email=data['email']).first()
+    user = User.query.filter_by(email=email).first()
 
-    if user and check_password_hash(user.password, data['password']):
+    if user and check_password_hash(user.password, password):
         session['user_id'] = user.id
-        session['user_name'] = user.name
         session['role'] = user.role
-        return jsonify({'redirect': '/dashboard'})
+        session['name'] = user.name
+        return redirect('/dashboard')
 
-    return jsonify({'message': 'Invalid credentials'}), 401
+    flash("Invalid credentials")
+    return redirect('/')
 
 
 @app.route('/logout')
@@ -114,180 +144,150 @@ def logout():
     return redirect('/')
 
 
-# ================= DASHBOARD =================
+# =========================
+# DASHBOARD
+# =========================
 
 @app.route('/dashboard')
 def dashboard():
-    if not require_login():
+    if 'user_id' not in session:
         return redirect('/')
 
     role = session['role']
+    user_id = session['user_id']
 
-    if role == 'student':
-        batch_ids = [b.batch_id for b in BatchStudent.query.filter_by(student_id=session['user_id']).all()]
-        sessions = SessionModel.query.filter(SessionModel.batch_id.in_(batch_ids)).all()
-        return render_template('dashboard.html', role=role, sessions=sessions)
+    users = User.query.all()
+    batches = Batch.query.all()
 
-    elif role == 'trainer':
-        sessions = SessionModel.query.filter_by(trainer_id=session['user_id']).all()
-        batches = Batch.query.filter_by(trainer_id=session['user_id']).all()
-        return render_template('dashboard.html', role=role, sessions=sessions, batches=batches)
+    sessions = []
 
-    else:
-        users = User.query.all()
-        return render_template('dashboard.html', role=role, users=users)
+    if role == 'trainer':
+        sessions = Session.query.join(Batch).filter(Batch.trainer_id == user_id).all()
 
+    elif role == 'student':
+        enrollments = Enrollment.query.filter_by(student_id=user_id).all()
+        batch_ids = [e.batch_id for e in enrollments]
 
-# ================= BATCH =================
+        if batch_ids:
+            sessions = Session.query.filter(Session.batch_id.in_(batch_ids)).all()
 
-@app.route('/batch/create', methods=['POST'])
-def create_batch():
-    if session.get('role') != 'trainer':
-        return jsonify({'message': 'Unauthorized'}), 403
+    else:  # institution/admin
+        sessions = Session.query.all()
 
-    data = request.get_json()
-
-    if not data.get('name'):
-        return jsonify({'message': 'Batch name required'}), 400
-
-    batch = Batch(
-        name=data['name'],
-        trainer_id=session['user_id'],
-        invite_code=generate_code()
+    return render_template(
+        "dashboard.html",
+        role=role,
+        users=users,
+        batches=batches,
+        sessions=sessions
     )
 
+
+# =========================
+# CREATE BATCH
+# =========================
+
+@app.route('/create_batch', methods=['POST'])
+def create_batch():
+    if session.get('role') != 'trainer':
+        return redirect('/dashboard')
+
+    name = request.form['batch_name']
+
+    batch = Batch(name=name, trainer_id=session['user_id'])
     db.session.add(batch)
     db.session.commit()
 
-    return jsonify({'message': 'Batch created', 'invite_code': batch.invite_code})
+    return redirect('/dashboard')
 
 
-@app.route('/batch/join', methods=['POST'])
+# =========================
+# JOIN BATCH
+# =========================
+
+@app.route('/join_batch', methods=['POST'])
 def join_batch():
     if session.get('role') != 'student':
-        return jsonify({'message': 'Unauthorized'}), 403
+        return redirect('/dashboard')
 
-    data = request.get_json()
+    batch_id = request.form['batch_id']
 
-    batch = Batch.query.filter_by(invite_code=data.get('code')).first()
+    exists = Enrollment.query.filter_by(
+        student_id=session['user_id'],
+        batch_id=batch_id
+    ).first()
 
-    if not batch:
-        return jsonify({'message': 'Invalid code'}), 400
+    if not exists:
+        enrollment = Enrollment(
+            student_id=session['user_id'],
+            batch_id=batch_id
+        )
+        db.session.add(enrollment)
+        db.session.commit()
 
-    if BatchStudent.query.filter_by(batch_id=batch.id, student_id=session['user_id']).first():
-        return jsonify({'message': 'Already joined'}), 400
-
-    db.session.add(BatchStudent(batch_id=batch.id, student_id=session['user_id']))
-    db.session.commit()
-
-    return jsonify({'message': 'Joined batch'})
+    return redirect('/dashboard')
 
 
-# ================= SESSION =================
+# =========================
+# CREATE SESSION
+# =========================
 
-@app.route('/session/create', methods=['POST'])
+@app.route('/create_session', methods=['POST'])
 def create_session():
     if session.get('role') != 'trainer':
-        return jsonify({'message': 'Unauthorized'}), 403
+        return redirect('/dashboard')
 
-    data = request.get_json()
+    title = request.form['title']
+    date = datetime.strptime(request.form['date'], "%Y-%m-%d").date()
+    batch_id = request.form['batch_id']
 
-    if not data.get('title') or not data.get('date'):
-        return jsonify({'message': 'Title and date required'}), 400
-
-    new_session = SessionModel(
-        title=data['title'],
-        date=datetime.strptime(data['date'], "%Y-%m-%d"),
-        trainer_id=session['user_id'],
-        batch_id=data.get('batch_id')
+    new_session = Session(
+        title=title,
+        date=date,
+        batch_id=batch_id
     )
 
     db.session.add(new_session)
     db.session.commit()
 
-    return jsonify({'message': 'Session created'})
+    return redirect('/dashboard')
 
 
-# ================= ATTENDANCE =================
+# =========================
+# MARK ATTENDANCE
+# =========================
 
-@app.route('/attendance/mark', methods=['POST'])
+@app.route('/mark_attendance', methods=['POST'])
 def mark_attendance():
     if session.get('role') != 'student':
-        return jsonify({'message': 'Unauthorized'}), 403
+        return redirect('/dashboard')
 
-    data = request.get_json()
+    session_id = request.form['session_id']
+    status = request.form['status']
 
-    if Attendance.query.filter_by(session_id=data['session_id'], student_id=session['user_id']).first():
-        return jsonify({'message': 'Already marked'}), 400
-
-    db.session.add(Attendance(
-        session_id=data['session_id'],
+    existing = Attendance.query.filter_by(
         student_id=session['user_id'],
-        status=data['status']
-    ))
+        session_id=session_id
+    ).first()
+
+    if existing:
+        existing.status = status
+    else:
+        attendance = Attendance(
+            student_id=session['user_id'],
+            session_id=session_id,
+            status=status
+        )
+        db.session.add(attendance)
 
     db.session.commit()
 
-    return jsonify({'message': 'Attendance marked'})
+    return redirect('/dashboard')
 
 
-@app.route('/session/<int:id>/attendance')
-def view_attendance(id):
-    records = Attendance.query.filter_by(session_id=id).all()
+# =========================
+# RUN
+# =========================
 
-    result = []
-    for r in records:
-        user = User.query.get(r.student_id)
-        result.append({
-            "name": user.name if user else "Unknown",
-            "status": r.status
-        })
-
-    return jsonify(result)
-
-
-# ================= STATS =================
-
-@app.route('/attendance/stats')
-def attendance_stats():
-    if not require_login():
-        return jsonify({})
-
-    records = Attendance.query.filter_by(student_id=session['user_id']).all()
-
-    present = len([r for r in records if r.status == 'Present'])
-    absent = len([r for r in records if r.status == 'Absent'])
-    late = len([r for r in records if r.status == 'Late'])
-
-    return jsonify({
-        "present": present,
-        "absent": absent,
-        "late": late
-    })
-
-
-# ================= ADMIN =================
-
-@app.route('/admin')
-def admin():
-    users = User.query.all()
-    records = Attendance.query.all()
-
-    data = []
-    for r in records:
-        user = User.query.get(r.student_id)
-        data.append({
-            "name": user.name if user else "Unknown",
-            "status": r.status,
-            "marked_at": r.marked_at
-        })
-
-    return render_template("admin.html", users=users, records=data)
-
-
-# ================= RUN =================
-
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
+if __name__ == "__main__":
     app.run(debug=True)
