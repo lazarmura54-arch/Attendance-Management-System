@@ -2,17 +2,20 @@
 const API = {
   signup: "/signup",
   login: "/login",
+
   createBatch: "/batch/create",
   joinBatch: "/batch/join",
+
   createSession: "/session/create",
   markAttendance: "/attendance/mark",
+
   viewAttendance: (id) => `/session/${id}/attendance`,
   stats: "/attendance/stats",
 };
 
 // ================= UTIL =================
 
-// Generic API call
+// Generic API call (FIXED)
 async function apiCall(url, method = "GET", data = null) {
   try {
     const res = await fetch(url, {
@@ -21,14 +24,23 @@ async function apiCall(url, method = "GET", data = null) {
       body: data ? JSON.stringify(data) : null,
     });
 
-    return await res.json();
+    // handle non-JSON safely
+    const text = await res.text();
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      console.error("Non JSON response:", text);
+      return { message: "Server error" };
+    }
   } catch (err) {
+    console.error("Network error:", err);
     showToast("Network error", "error");
-    console.error(err);
+    return null;
   }
 }
 
-// Toast (replaces alert)
+// Toast (no alert)
 function showToast(message, type = "success") {
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
@@ -70,7 +82,13 @@ async function signup() {
   }
 
   const res = await apiCall(API.signup, "POST", data);
-  showToast(res.message);
+
+  if (!res) return resetButton(btn);
+
+  showToast(res.message || "Signup done");
+
+  // auto switch to login tab
+  switchTab("login");
 
   resetButton(btn);
 }
@@ -84,12 +102,19 @@ async function login() {
     password: document.getElementById("login_password").value.trim(),
   };
 
+  if (!data.email || !data.password) {
+    showToast("Enter email & password", "error");
+    return resetButton(btn);
+  }
+
   const res = await apiCall(API.login, "POST", data);
+
+  if (!res) return resetButton(btn);
 
   if (res.redirect) {
     window.location.href = res.redirect;
   } else {
-    showToast(res.message, "error");
+    showToast(res.message || "Login failed", "error");
     resetButton(btn);
   }
 }
@@ -109,8 +134,14 @@ async function createBatch() {
 
   const res = await apiCall(API.createBatch, "POST", { name });
 
-  showToast("Invite Code: " + res.invite_code);
-  document.getElementById("invite_code").innerText = res.invite_code;
+  if (!res) return resetButton(btn);
+
+  showToast(res.message || "Batch created");
+
+  if (res.invite_code) {
+    document.getElementById("invite_code").innerText =
+      "Invite Code: " + res.invite_code;
+  }
 
   resetButton(btn);
 }
@@ -121,7 +152,11 @@ async function joinBatch() {
   if (!code) return;
 
   const res = await apiCall(API.joinBatch, "POST", { code });
-  showToast(res.message);
+
+  if (!res) return;
+
+  showToast(res.message || "Joined batch");
+  location.reload();
 }
 
 // ================= SESSION =================
@@ -143,8 +178,11 @@ async function createSession() {
 
   const res = await apiCall(API.createSession, "POST", data);
 
-  showToast(res.message);
-  resetButton(btn);
+  if (!res) return resetButton(btn);
+
+  showToast(res.message || "Session created");
+
+  location.reload();
 }
 
 // ================= ATTENDANCE =================
@@ -160,12 +198,19 @@ async function markAttendance(id) {
     status,
   });
 
-  showToast(res.message);
+  if (!res) return resetButton(btn);
+
+  showToast(res.message || "Attendance updated");
+
   resetButton(btn);
 }
 
+// ================= VIEW ATTENDANCE =================
+
 async function viewAttendance(id) {
   const data = await apiCall(API.viewAttendance(id));
+
+  if (!data) return;
 
   let content = "<h3>Attendance</h3>";
 
@@ -207,7 +252,7 @@ async function loadChart() {
       datasets: [
         {
           label: "Attendance",
-          data: [data.present, data.absent, data.late],
+          data: [data.present || 0, data.absent || 0, data.late || 0],
         },
       ],
     },
