@@ -1,3 +1,0 @@
-SQLALCHEMY_DATABASE_URI = "sqlite:///attendance.db"
-SQLALCHEMY_TRACK_MODIFICATIONS = False
-SECRET_KEY = "secret"

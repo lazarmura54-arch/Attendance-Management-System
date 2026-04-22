@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+instance/
+attendance.db
+.env
+config.py
+models.py
