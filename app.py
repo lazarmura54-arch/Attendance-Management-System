@@ -11,20 +11,26 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
+
+# SECRET KEY
 app.secret_key = os.getenv("SECRET_KEY", "supersecret")
 
 # =========================
-# DATABASE CONFIG (RENDER)
+# DATABASE CONFIG (FIXED)
 # =========================
 database_url = os.getenv("DATABASE_URL")
 
-# Fix for Render (important)
+if not database_url:
+    raise ValueError("❌ DATABASE_URL is not set in environment variables")
+
+# Fix postgres URL for SQLAlchemy
 if database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# Render PostgreSQL fix (SSL)
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     "pool_pre_ping": True,
     "pool_recycle": 300,
@@ -46,7 +52,7 @@ class User(db.Model):
     name = db.Column(db.String(100))
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(200))
-    role = db.Column(db.String(50))  # student, trainer, institution
+    role = db.Column(db.String(50))
 
 
 class Batch(db.Model):
@@ -65,7 +71,7 @@ class Enrollment(db.Model):
     batch_id = db.Column(db.Integer, db.ForeignKey('batches.id'))
 
 
-class Session(db.Model):
+class SessionModel(db.Model):
     __tablename__ = "sessions"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -80,7 +86,7 @@ class Attendance(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     session_id = db.Column(db.Integer, db.ForeignKey('sessions.id'))
-    status = db.Column(db.String(20))  # Present, Absent, Late
+    status = db.Column(db.String(20))
 
 
 # =========================
@@ -88,6 +94,7 @@ class Attendance(db.Model):
 # =========================
 with app.app_context():
     db.create_all()
+
 
 # =========================
 # ROUTES
@@ -113,8 +120,8 @@ def signup():
         flash("User already exists")
         return redirect('/')
 
-    new_user = User(name=name, email=email, password=password, role=role)
-    db.session.add(new_user)
+    user = User(name=name, email=email, password=password, role=role)
+    db.session.add(user)
     db.session.commit()
 
     flash("Signup successful")
@@ -131,7 +138,8 @@ def login():
     if user and check_password_hash(user.password, password):
         session['user_id'] = user.id
         session['role'] = user.role
-        session['name'] = user.name
+        session['name'] = user.name   # ✅ FIXED
+
         return redirect('/dashboard')
 
     flash("Invalid credentials")
@@ -159,27 +167,27 @@ def dashboard():
     users = User.query.all()
     batches = Batch.query.all()
 
-    sessions = []
+    sessions_data = []
 
     if role == 'trainer':
-        sessions = Session.query.join(Batch).filter(Batch.trainer_id == user_id).all()
+        sessions_data = SessionModel.query.join(Batch).filter(Batch.trainer_id == user_id).all()
 
     elif role == 'student':
         enrollments = Enrollment.query.filter_by(student_id=user_id).all()
         batch_ids = [e.batch_id for e in enrollments]
 
         if batch_ids:
-            sessions = Session.query.filter(Session.batch_id.in_(batch_ids)).all()
+            sessions_data = SessionModel.query.filter(SessionModel.batch_id.in_(batch_ids)).all()
 
-    else:  # institution/admin
-        sessions = Session.query.all()
+    else:
+        sessions_data = SessionModel.query.all()
 
     return render_template(
         "dashboard.html",
         role=role,
         users=users,
         batches=batches,
-        sessions=sessions
+        sessions=sessions_data
     )
 
 
@@ -241,7 +249,7 @@ def create_session():
     date = datetime.strptime(request.form['date'], "%Y-%m-%d").date()
     batch_id = request.form['batch_id']
 
-    new_session = Session(
+    new_session = SessionModel(
         title=title,
         date=date,
         batch_id=batch_id
