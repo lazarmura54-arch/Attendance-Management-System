@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Panel</title>
+
+    <!-- External CSS -->
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+
+  <body>
+    <div class="container">
+      <!-- ================= SIDEBAR ================= -->
+      <aside class="sidebar">
+        <h2>SkillBridge</h2>
+        <p>{{ session['user_name'] }}</p>
+        <span class="badge">Admin</span>
+
+        <nav>
+          <a href="/dashboard">Dashboard</a>
+          <a href="/admin" class="active">Admin</a>
+          <a href="/logout">Logout</a>
+        </nav>
+      </aside>
+
+      <!-- ================= MAIN ================= -->
+      <main class="main">
+        <h1>Admin Panel</h1>
+
+        <!-- ================= STATS ================= -->
+        <section class="stats">
+          <div class="stat-card">
+            <h3>Total Users</h3>
+            <p>{{ users|length if users else 0 }}</p>
+          </div>
+
+          <div class="stat-card">
+            <h3>Attendance Records</h3>
+            <p>{{ records|length if records else 0 }}</p>
+          </div>
+
+          <div class="stat-card">
+            <h3>Status</h3>
+            <p>System Active</p>
+          </div>
+        </section>
+
+        <!-- ================= USERS TABLE ================= -->
+        <section class="card">
+          <h2>Users</h2>
+
+          {% if users %}
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% for u in users %}
+              <tr>
+                <td>{{ u.name }}</td>
+                <td>{{ u.email }}</td>
+                <td>
+                  <span class="badge">{{ u.role }}</span>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="muted">No users found</p>
+          {% endif %}
+        </section>
+
+        <!-- ================= ATTENDANCE TABLE ================= -->
+        <section class="card">
+          <h2>Attendance Records</h2>
+
+          {% if records %}
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Status</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% for r in records %}
+              <tr>
+                <td>{{ r.name }}</td>
+                <td>
+                  <span class="badge">{{ r.status }}</span>
+                </td>
+                <td>{{ r.marked_at }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="muted">No attendance records</p>
+          {% endif %}
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

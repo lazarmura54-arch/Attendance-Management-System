@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard</title>
+
+    <!-- External CSS only -->
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+
+  <body>
+    <div class="container">
+      <!-- ================= SIDEBAR ================= -->
+      <aside class="sidebar">
+        <h2>SkillBridge</h2>
+        <p>{{ session['user_name'] }}</p>
+        <span class="badge">{{ role }}</span>
+
+        <nav>
+          <a href="/dashboard" class="active">Dashboard</a>
+          <a href="/logout">Logout</a>
+        </nav>
+      </aside>
+
+      <!-- ================= MAIN ================= -->
+      <main class="main">
+        <h1>Dashboard</h1>
+
+        <!-- ================= STATS ================= -->
+        <section class="stats">
+          <div class="stat-card">
+            <h3>Total Sessions</h3>
+            <p>{{ sessions|length if sessions else 0 }}</p>
+          </div>
+
+          <div class="stat-card">
+            <h3>Attendance</h3>
+            <p>Live</p>
+          </div>
+
+          <div class="stat-card">
+            <h3>Status</h3>
+            <p>Active</p>
+          </div>
+        </section>
+
+        <!-- ================= CHART ================= -->
+        <section class="card">
+          <h2>Attendance Overview</h2>
+          <canvas id="chart"></canvas>
+        </section>
+
+        <!-- ================= STUDENT VIEW ================= -->
+        {% if role == 'student' %}
+
+        <section class="card">
+          <h2>Join Batch</h2>
+          <button onclick="joinBatch()">Join Batch</button>
+        </section>
+
+        <section class="card">
+          <h2>Your Sessions</h2>
+
+          {% if sessions %} {% for s in sessions %}
+          <div class="card">
+            <div class="flex-between">
+              <div>
+                <h3>{{ s.title }}</h3>
+                <p class="muted">{{ s.date }}</p>
+              </div>
+            </div>
+
+            <div class="flex-between">
+              <select id="status_{{ s.id }}">
+                <option value="Present">Present</option>
+                <option value="Absent">Absent</option>
+                <option value="Late">Late</option>
+              </select>
+
+              <button onclick="markAttendance({{ s.id }})">
+                Mark Attendance
+              </button>
+            </div>
+          </div>
+          {% endfor %} {% else %}
+          <p class="muted">No sessions available</p>
+          {% endif %}
+        </section>
+
+        {% endif %}
+
+        <!-- ================= TRAINER VIEW ================= -->
+        {% if role == 'trainer' %}
+
+        <section class="card">
+          <h2>Create Batch</h2>
+
+          <input id="batch_name" placeholder="Batch Name" />
+          <button onclick="createBatch()">Create Batch</button>
+
+          <p id="invite_code" class="muted"></p>
+        </section>
+
+        <section class="card">
+          <h2>Create Session</h2>
+
+          <input id="title" placeholder="Session Title" />
+          <input id="date" type="date" />
+
+          <select id="batch_id">
+            {% for b in batches %}
+            <option value="{{ b.id }}">{{ b.name }}</option>
+            {% endfor %}
+          </select>
+
+          <button onclick="createSession()">Create Session</button>
+        </section>
+
+        <section class="card">
+          <h2>Your Sessions</h2>
+
+          {% if sessions %} {% for s in sessions %}
+          <div class="card flex-between">
+            <div>
+              <h3>{{ s.title }}</h3>
+              <p class="muted">{{ s.date }}</p>
+            </div>
+
+            <button onclick="viewAttendance({{ s.id }})">
+              View Attendance
+            </button>
+          </div>
+          {% endfor %} {% else %}
+          <p class="muted">No sessions yet</p>
+          {% endif %}
+        </section>
+
+        {% endif %}
+
+        <!-- ================= ADMIN / OTHER ROLES ================= -->
+        {% if role not in ['student','trainer'] %}
+
+        <section class="card">
+          <h2>All Users</h2>
+
+          {% if users %} {% for u in users %}
+          <div class="flex-between">
+            <p>{{ u.name }}</p>
+            <span class="badge">{{ u.role }}</span>
+          </div>
+          {% endfor %} {% else %}
+          <p class="muted">No users found</p>
+          {% endif %}
+        </section>
+
+        {% endif %}
+      </main>
+    </div>
+
+    <!-- ================= SCRIPTS ================= -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/script.js"></script>
+  </body>
+</html>

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SkillBridge</title>
+
+    <!-- External CSS only -->
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+
+  <body>
+    <div class="auth-container">
+      <!-- LEFT PANEL -->
+      <div class="auth-left">
+        <h1>SkillBridge</h1>
+        <p>
+          Smart Attendance & Training Management System <br /><br />
+          Track sessions, manage batches, and monitor attendance efficiently.
+        </p>
+      </div>
+
+      <!-- RIGHT PANEL -->
+      <div class="auth-right">
+        <div class="auth-card">
+          <!-- TABS -->
+          <div class="auth-tabs">
+            <div class="auth-tab active" onclick="switchTab('login')">
+              Login
+            </div>
+            <div class="auth-tab" onclick="switchTab('signup')">Signup</div>
+          </div>
+
+          <!-- LOGIN FORM -->
+          <div id="loginForm" class="auth-form active">
+            <h2>Welcome Back</h2>
+
+            <input id="login_email" type="email" placeholder="Email" required />
+            <input
+              id="login_password"
+              type="password"
+              placeholder="Password"
+              required
+            />
+
+            <button type="button" onclick="login()">Login</button>
+          </div>
+
+          <!-- SIGNUP FORM -->
+          <div id="signupForm" class="auth-form">
+            <h2>Create Account</h2>
+
+            <input id="name" type="text" placeholder="Full Name" required />
+            <input id="email" type="email" placeholder="Email" required />
+            <input
+              id="password"
+              type="password"
+              placeholder="Password"
+              required
+            />
+
+            <select id="role">
+              <option value="student">Student</option>
+              <option value="trainer">Trainer</option>
+              <option value="institution">Institution</option>
+              <option value="manager">Manager</option>
+              <option value="monitor">Monitor</option>
+            </select>
+
+            <button type="button" onclick="signup()">Create Account</button>
+          </div>
+
+          <!-- FOOTER -->
+          <div class="small-text">
+            © 2026 SkillBridge • Smart Learning System
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- JS -->
+    <script src="/static/script.js"></script>
+
+    <!-- Tab Switch Script -->
+    <script>
+      function switchTab(tab) {
+        const tabs = document.querySelectorAll(".auth-tab");
+        const forms = document.querySelectorAll(".auth-form");
+
+        tabs.forEach((t) => t.classList.remove("active"));
+        forms.forEach((f) => f.classList.remove("active"));
+
+        if (tab === "login") {
+          tabs[0].classList.add("active");
+          document.getElementById("loginForm").classList.add("active");
+        } else {
+          tabs[1].classList.add("active");
+          document.getElementById("signupForm").classList.add("active");
+        }
+      }
+    </script>
+  </body>
+</html>
